@@ -37,6 +37,7 @@ class Bridge
 Bridge::Bridge(int uartNo, int baudRate, int serialParam, int rxdPin, int txdPin, int port):
   serial(uartNo)
 {
+  serial.end();
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
   this->port = port;
 }
@@ -114,7 +115,9 @@ void Bridge::loop()
 
 }
 
-Bridge b(1, 19200, SERIAL_8N1, 16, 17, 8880);
+Bridge a(0, 19200, SERIAL_8E1, 3, 1, 8880);
+Bridge b(1, 19200, SERIAL_8E1, 26, 27, 8881);
+Bridge c(2, 19200, SERIAL_8E1, 16, 17, 8882);
 
 void setup() {
   delay(500);
@@ -142,7 +145,9 @@ void setup() {
 
   esp_err_t esp_wifi_set_max_tx_power(50);  //lower WiFi Power
 
+  a.start();
   b.start();
+  c.start();
 }
 
 void loop() {
