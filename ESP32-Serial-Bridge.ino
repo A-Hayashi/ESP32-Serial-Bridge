@@ -3,6 +3,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <ArduinoOTA.h>
 
 #define MODE_STA // phone connects directly to ESP
 
@@ -134,9 +135,10 @@ void setup() {
 #ifdef MODE_STA
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pw);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
   }
   Serial.println("\nWiFi connected");
   Serial.println("IP address: ");
@@ -145,11 +147,32 @@ void setup() {
 
   esp_err_t esp_wifi_set_max_tx_power(50);  //lower WiFi Power
 
+
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+  
   a.start();
   b.start();
   c.start();
 }
 
 void loop() {
-
+  ArduinoOTA.handle();
 }
