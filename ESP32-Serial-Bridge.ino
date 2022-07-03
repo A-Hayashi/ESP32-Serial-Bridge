@@ -8,8 +8,8 @@
 
 //https://github.com/espressif/arduino-esp32/issues/5300
 
-//#define MODE_AP // phone connects directly to ESP
-#define MODE_STA
+#define MODE_AP // phone connects directly to ESP
+//#define MODE_STA
 
 #ifdef MODE_AP
 // For AP mode:
