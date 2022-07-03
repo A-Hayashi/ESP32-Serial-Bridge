@@ -4,14 +4,27 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <ArduinoOTA.h>
+#include <NetBIOS.h>
 
-#define MODE_STA // phone connects directly to ESP
+//https://github.com/espressif/arduino-esp32/issues/5300
 
+//#define MODE_AP // phone connects directly to ESP
+#define MODE_STA
+
+#ifdef MODE_AP
 // For AP mode:
+const char *ssid = "LK8000";  // You will connect your phone to this Access Point
+const char *pw = "Flightcomputer"; // and this is the password
+IPAddress ip(192, 168, 10, 30); // connect to this IP
+IPAddress netmask(255, 255, 255, 0);
+#endif
+
+#ifdef MODE_STA
 const char *ssid = "aterm-82f586-gw";  // You will connect your phone to this Access Point
 const char *pw = "4u2V58F#"; // and this is the password
-IPAddress ip(192, 168, 10, 30); // From RoboRemo app, connect to this IP
-IPAddress netmask(255, 255, 255, 0);
+#endif
+
+const char *netBios = "Bridge1"; // NetBIOS Name
 #define bufferSize 1024
 
 class Bridge
@@ -116,9 +129,9 @@ void Bridge::loop()
 
 }
 
-Bridge a(0, 19200, SERIAL_8E1, 3, 1, 8880);
-Bridge b(1, 19200, SERIAL_8E1, 26, 27, 8881);
-Bridge c(2, 19200, SERIAL_8E1, 16, 17, 8882);
+Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
+Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
+Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 
 void setup() {
   delay(500);
@@ -135,6 +148,7 @@ void setup() {
 #ifdef MODE_STA
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pw);
+
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
     delay(5000);
@@ -146,8 +160,7 @@ void setup() {
 #endif
 
   esp_err_t esp_wifi_set_max_tx_power(50);  //lower WiFi Power
-
-
+  NBNS.begin(netBios);
 
   ArduinoOTA.onStart([]() {
     Serial.println("Start");
@@ -167,7 +180,7 @@ void setup() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
-  
+
   a.start();
   b.start();
   c.start();
