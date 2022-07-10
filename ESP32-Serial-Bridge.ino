@@ -37,6 +37,10 @@ class Bridge
   private:
     HardwareSerial serial;
     int port;
+    int baudRate;
+    int serialParam;
+    int rxdPin;
+    int txdPin;
 
     WiFiServer server;
     WiFiClient TCPClient;
@@ -51,9 +55,11 @@ class Bridge
 Bridge::Bridge(int uartNo, int baudRate, int serialParam, int rxdPin, int txdPin, int port):
   serial(uartNo)
 {
-  serial.end();
-  serial.begin(baudRate, serialParam, rxdPin, txdPin);
   this->port = port;
+  this->baudRate = baudRate;
+  this->serialParam = serialParam;
+  this->rxdPin = rxdPin;
+  this->txdPin = txdPin;
 }
 
 void Bridge::start(void)
@@ -77,6 +83,9 @@ void Bridge::runner(void *params)
 
 void Bridge::loop()
 {
+  serial.end();
+  serial.begin(baudRate, serialParam, rxdPin, txdPin);
+
   server.begin(port); // start TCP server
   server.setNoDelay(true);
 
@@ -135,7 +144,7 @@ Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 
 void setup() {
   delay(500);
-  Serial.begin(115200);
+  Serial.begin(9600, SERIAL_8E1);
 
 #ifdef MODE_AP
   //AP mode (phone connects directly to ESP) (no router)
