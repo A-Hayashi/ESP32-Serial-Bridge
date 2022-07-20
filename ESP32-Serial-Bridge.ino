@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 #include <ArduinoOTA.h>
 #include <NetBIOS.h>
+#include "SoftwareSerial.h"
 
 //https://github.com/espressif/arduino-esp32/issues/5300
 
@@ -31,11 +32,13 @@ class Bridge
 {
   public:
     Bridge(int uartNo, int baudRate, int serialParam, int rxdPin, int txdPin, int port);
+    void serialBegin(int baudRate, int serialParam);
     static void runner(void *params);
     void start();
     void loop();
   private:
     HardwareSerial serial;
+    int serialBeginRequested;
     int port;
     int baudRate;
     int serialParam;
@@ -51,6 +54,13 @@ class Bridge
     uint8_t buf2[bufferSize];
     uint16_t i2;
 };
+
+void Bridge::serialBegin(int baudRate, int serialParam)
+{
+  this->baudRate = baudRate;
+  this->serialParam = serialParam;
+  serialBeginRequested = true;
+}
 
 Bridge::Bridge(int uartNo, int baudRate, int serialParam, int rxdPin, int txdPin, int port):
   serial(uartNo)
@@ -90,6 +100,13 @@ void Bridge::loop()
   server.setNoDelay(true);
 
   while (1) {
+    if (serialBeginRequested == true) {
+      serialBeginRequested = false;
+      serial.end();
+      serial.begin(baudRate, serialParam, rxdPin, txdPin);
+    } else {
+      /* DO NOTHING */
+    }
     if (server.hasClient())
     {
       //find free/disconnected spot
@@ -142,8 +159,15 @@ Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
 Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 
+SoftwareSerial mySerial;
+
 void setup() {
   delay(500);
+
+  mySerial.begin(115200, SWSERIAL_8N1, 4, 5, false, 256);
+  mySerial.enableIntTx(false);
+  mySerial.println("Hello");
+
   Serial.begin(9600, SERIAL_8E1);
 
 #ifdef MODE_AP
@@ -196,5 +220,45 @@ void setup() {
 }
 
 void loop() {
+  WiFiServer server;
+  WiFiClient TCPClient;
+  uint8_t buf1[bufferSize];
+  uint16_t i1;
+
+  server.begin(8883); // start TCP server
+  server.setNoDelay(true);
+
+  while (1) {
+    if (server.hasClient())
+    {
+      //find free/disconnected spot
+      if (!TCPClient || !TCPClient.connected()) {
+        if (TCPClient) {
+          TCPClient.stop();
+        }
+        TCPClient = server.available();
+      }
+      //no free/disconnected spot so reject
+      WiFiClient TmpserverClient = server.available();
+      TmpserverClient.stop();
+    }
+
+    if (TCPClient)
+    {
+      while (TCPClient.available())
+      {
+        buf1[i1] = TCPClient.read(); // read char from client (LK8000 app)
+        if (i1 < bufferSize - 1) {
+          i1++;
+        }
+      }
+      i1 = 0;
+      if (0) { /* 解析結果 */
+        a.serialBegin(9600, SERIAL_8E1);
+        b.serialBegin(9600, SERIAL_8E1);
+        c.serialBegin(9600, SERIAL_8E1);
+      }
+    }
+  }
   ArduinoOTA.handle();
 }
