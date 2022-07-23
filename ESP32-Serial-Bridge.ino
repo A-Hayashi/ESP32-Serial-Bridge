@@ -69,7 +69,7 @@ void Bridge::start(void)
   /* create task */
   xTaskCreatePinnedToCore( this->runner,   /* タスクの入口となる関数名 */
                            "TASK1", /* タスクの名称 */
-                           1024 * 10, /* スタックサイズ */
+                           1024 * 3, /* スタックサイズ */
                            this,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
                            &taskHandle,    /* ハンドル構造体のポインタ */
@@ -147,7 +147,6 @@ void Bridge::loop()
 
 }
 
-
 xTaskHandle managerTaskHandle;
 
 //Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
@@ -155,53 +154,6 @@ Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 void manager(void *params)
 {
-  delay(500);
-  Serial.begin(9600);
-
-#ifdef MODE_AP
-  //AP mode (phone connects directly to ESP) (no router)
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, pw); // configure ssid and password for softAP
-  delay(2000); // VERY IMPORTANT
-  WiFi.softAPConfig(ip, ip, netmask); // configure ip address for softAP
-#endif
-
-#ifdef MODE_STA
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, pw);
-
-  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
-    ESP.restart();
-  }
-  Serial.println("\nWiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-#endif
-
-  esp_err_t esp_wifi_set_max_tx_power(50);  //lower WiFi Power
-  NBNS.begin(netBios);
-
-  ArduinoOTA.onStart([]() {
-    Serial.println("Start");
-  });
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-  });
-  ArduinoOTA.begin();
-
   //  a.start();
   b.start();
   c.start();
@@ -256,6 +208,53 @@ void manager(void *params)
 }
 
 void setup() {
+  delay(500);
+  Serial.begin(9600);
+
+#ifdef MODE_AP
+  //AP mode (phone connects directly to ESP) (no router)
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, pw); // configure ssid and password for softAP
+  delay(2000); // VERY IMPORTANT
+  WiFi.softAPConfig(ip, ip, netmask); // configure ip address for softAP
+#endif
+
+#ifdef MODE_STA
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pw);
+
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
+  }
+  Serial.println("\nWiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+#endif
+
+  esp_err_t esp_wifi_set_max_tx_power(50);  //lower WiFi Power
+  NBNS.begin(netBios);
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+
   xTaskCreatePinnedToCore( manager,   /* タスクの入口となる関数名 */
                            "MANAGER", /* タスクの名称 */
                            1024 * 100, /* スタックサイズ */
