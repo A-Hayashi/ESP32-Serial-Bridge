@@ -34,6 +34,7 @@ class Bridge
     static void runner(void *params);
     void start();
     void loop();
+    xTaskHandle getTaskhandle();
   private:
     HardwareSerial serial;
     int port;
@@ -41,6 +42,7 @@ class Bridge
     int serialParam;
     int rxdPin;
     int txdPin;
+    xTaskHandle taskHandle;
 
     WiFiServer server;
     WiFiClient TCPClient;
@@ -70,9 +72,14 @@ void Bridge::start(void)
                            1024 * 10, /* スタックサイズ */
                            this,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
-                           NULL,    /* ハンドル構造体のポインタ */
+                           &taskHandle,    /* ハンドル構造体のポインタ */
                            0 );     /* 割り当てるコア (0/1) */
 
+}
+
+xTaskHandle Bridge::getTaskhandle(void)
+{
+  return taskHandle;
 }
 
 void Bridge::runner(void *params)
@@ -140,11 +147,12 @@ void Bridge::loop()
 
 }
 
+
+xTaskHandle managerTaskHandle;
+
 //Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
 Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
-
-
 void manager(void *params)
 {
   delay(500);
@@ -197,20 +205,63 @@ void manager(void *params)
   //  a.start();
   b.start();
   c.start();
+
+  WiFiServer server;
+  WiFiClient TCPClient;
+  uint8_t buf1[bufferSize];
+  uint16_t i1;
+
+  server.begin(8883); // start TCP server
+  server.setNoDelay(true);
+
   while (1) {
-    Serial.println("Start");
-    vTaskDelay(1000);
+    if (server.hasClient())
+    {
+      //find free/disconnected spot
+      if (!TCPClient || !TCPClient.connected()) {
+        if (TCPClient) {
+          TCPClient.stop();
+        }
+        TCPClient = server.available();
+      }
+      //no free/disconnected spot so reject
+      WiFiClient TmpserverClient = server.available();
+      TmpserverClient.stop();
+    }
+
+    if (TCPClient)
+    {
+      while (TCPClient.available())
+      {
+        buf1[i1] = TCPClient.read(); // read char from client (LK8000 app)
+        if (i1 < bufferSize - 1) {
+          i1++;
+        }
+      }
+      Serial.write(buf1, i1);
+      i1 = 0;
+    }
+    //    if (TCPClient) {
+    //      Serial.write(buf2, i2);
+    //      TCPClient.write(buf2, i2);
+    //    }
+    //    i2 = 0;
+
+    vTaskDelay(1);
+    //    Serial.println("Start");
+    //    Serial.println(uxTaskGetStackHighWaterMark(b.getTaskhandle()));
+    //    Serial.println(uxTaskGetStackHighWaterMark(c.getTaskhandle()));
+    //    Serial.println(uxTaskGetStackHighWaterMark(managerTaskHandle));
   }
 }
-
 
 void setup() {
   xTaskCreatePinnedToCore( manager,   /* タスクの入口となる関数名 */
                            "MANAGER", /* タスクの名称 */
-                           1024 * 10, /* スタックサイズ */
+                           1024 * 100, /* スタックサイズ */
                            NULL,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
-                           NULL,    /* ハンドル構造体のポインタ */
+                           &managerTaskHandle,    /* ハンドル構造体のポインタ */
                            0 );     /* 割り当てるコア (0/1) */
 }
 
