@@ -67,7 +67,7 @@ void Bridge::start(void)
   /* create task */
   xTaskCreatePinnedToCore( this->runner,   /* タスクの入口となる関数名 */
                            "TASK1", /* タスクの名称 */
-                           1024*10,   /* スタックサイズ */
+                           1024 * 10, /* スタックサイズ */
                            this,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
                            NULL,    /* ハンドル構造体のポインタ */
@@ -97,7 +97,7 @@ void Bridge::loop()
         if (TCPClient) {
           TCPClient.stop();
         }
-        TCPClient = server.available(); 
+        TCPClient = server.available();
       }
       //no free/disconnected spot so reject
       WiFiClient TmpserverClient = server.available();
@@ -124,7 +124,7 @@ void Bridge::loop()
       while (serial.available())
       {
         buf2[i2] = serial.read(); // read char from UART(num)
-        if (i2 < bufferSize - 1) {  
+        if (i2 < bufferSize - 1) {
           i2++;
         }
       }
@@ -144,7 +144,9 @@ void Bridge::loop()
 Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 
-void setup() {
+
+void manager(void *params)
+{
   delay(500);
   Serial.begin(9600);
 
@@ -192,9 +194,24 @@ void setup() {
   });
   ArduinoOTA.begin();
 
-//  a.start();
+  //  a.start();
   b.start();
   c.start();
+  while (1) {
+    Serial.println("Start");
+    vTaskDelay(1000);
+  }
+}
+
+
+void setup() {
+  xTaskCreatePinnedToCore( manager,   /* タスクの入口となる関数名 */
+                           "MANAGER", /* タスクの名称 */
+                           1024 * 10, /* スタックサイズ */
+                           NULL,    /* パラメータのポインタ */
+                           1,       /* プライオリティ */
+                           NULL,    /* ハンドル構造体のポインタ */
+                           0 );     /* 割り当てるコア (0/1) */
 }
 
 void loop() {
