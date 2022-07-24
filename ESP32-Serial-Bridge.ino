@@ -35,6 +35,7 @@ class Bridge
     void start();
     void loop();
     xTaskHandle getTaskhandle();
+    void serialBegin(int baudRate, int serialParam);
   private:
     HardwareSerial serial;
     int port;
@@ -76,6 +77,15 @@ void Bridge::start(void)
                            0 );     /* 割り当てるコア (0/1) */
 
 }
+
+void Bridge::serialBegin(int baudRate, int serialParam)
+{
+  this->baudRate = baudRate;
+  this->serialParam = serialParam;
+  serial.end();
+  serial.begin(baudRate, serialParam, rxdPin, txdPin);
+}
+
 
 xTaskHandle Bridge::getTaskhandle(void)
 {
@@ -120,9 +130,14 @@ void Bridge::loop()
           i1++;
         }
       }
-
-      Serial.write(buf1, i1);
-      serial.write(buf1, i1); // now send to UART(num):
+      if (i1 > 0) {
+        Serial.print("from\t");
+        Serial.print(port);
+        Serial.print(":");
+        Serial.write(buf1, i1);
+        serial.write(buf1, i1); // now send to UART(num):
+        Serial.println("");
+      }
       i1 = 0;
     }
 
@@ -136,9 +151,15 @@ void Bridge::loop()
         }
       }
       // now send to WiFi:
-      if (TCPClient) {
-        Serial.write(buf2, i2);
-        TCPClient.write(buf2, i2);
+      if (i2 > 0) {
+        if (TCPClient) {
+          Serial.print("to\t");
+          Serial.print(port);
+          Serial.print(":");
+          Serial.write(buf2, i2);
+          Serial.println("");
+          TCPClient.write(buf2, i2);
+        }
       }
       i2 = 0;
     }
@@ -149,23 +170,26 @@ void Bridge::loop()
 
 xTaskHandle managerTaskHandle;
 
+Bridge a(3, 9600, SERIAL_8E1, 3, 1, 8880);
 //Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
 Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
 void manager(void *params)
 {
-  //  a.start();
+  //  Serial.end();
+
+  a.start();
   b.start();
   c.start();
 
   WiFiServer server;
   WiFiClient TCPClient;
-  uint8_t buf1[bufferSize];
+  char buf1[bufferSize];
   uint16_t i1;
+  bool ack;
 
   server.begin(8883); // start TCP server
   server.setNoDelay(true);
-
   while (1) {
     if (server.hasClient())
     {
@@ -190,14 +214,63 @@ void manager(void *params)
           i1++;
         }
       }
-      Serial.write(buf1, i1);
+      if (i1 > 0) {
+        Serial.print("from\t");
+        Serial.print("8883");
+        Serial.print(":");
+        Serial.write(buf1, i1);
+        Serial.println("");
+
+        ack = true;
+        char *ptr = strtok(buf1, ",");
+        if (strcmp(ptr, "SERIAL")) {
+          int baudRate;
+          int serialParam;
+          ptr = strtok(NULL, ",");
+          baudRate = atoi(ptr);
+          Serial.print("baudRate:");
+          Serial.println(baudRate);
+
+          ptr = strtok(NULL, ",");
+          Serial.print("serialParam:");
+          if (strcmp(ptr, "8N1") == 0) {
+            serialParam = SERIAL_8N1;
+            Serial.println("SERIAL_8N1");
+          }  else if (strcmp(ptr, "8E1") == 0) {
+            serialParam = SERIAL_8E1;
+            Serial.println("SERIAL_8E1");
+          } else if (strcmp(ptr, "8O1") == 0) {
+            serialParam = SERIAL_8O1;
+            Serial.println("SERIAL_8O1");
+          } else {
+            ack = false;
+            serialParam = SERIAL_8N1;
+            Serial.println("SERIAL_8N1");
+          }
+          a.serialBegin(baudRate, serialParam);
+          b.serialBegin(baudRate, serialParam);
+          c.serialBegin(baudRate, serialParam);
+        } else {
+          ack = false;
+        }
+
+        String res;
+        if (ack == true) {
+          res = "ack";
+        } else {
+          res = "nak";
+        }
+
+        Serial.print("to\t");
+        Serial.print("8883");
+        Serial.print(":");
+        Serial.print(res);
+        Serial.println("");
+
+        TCPClient.print(res);
+      }
       i1 = 0;
     }
-    //    if (TCPClient) {
-    //      Serial.write(buf2, i2);
-    //      TCPClient.write(buf2, i2);
-    //    }
-    //    i2 = 0;
 
     vTaskDelay(1);
     //    Serial.println("Start");
