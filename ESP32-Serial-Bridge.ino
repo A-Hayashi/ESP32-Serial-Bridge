@@ -8,8 +8,8 @@
 #include <WiFiUdp.h>
 #include <EEPROM.h>
 
-#define DEBUG (1)
-//#define DEBUG (0)
+//#define DEBUG (1)
+#define DEBUG (0)
 
 //NetBIOS library only works in STA mode, and not in AP mode. #5300
 //https://github.com/espressif/arduino-esp32/issues/5300
