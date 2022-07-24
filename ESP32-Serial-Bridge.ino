@@ -120,6 +120,9 @@ void Bridge::tcpLoop()
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
   server.begin(port); // start TCP server
   server.setNoDelay(true);
+
+  Serial.print("start TCP server: ");
+  Serial.println(port);
   while (1) {
     if (server.hasClient())
     {
@@ -185,9 +188,10 @@ void Bridge::udpLoop()
 {
   serial.end();
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
-
   udp.begin(port); // start UDP server
-
+  
+  Serial.print("start UDP server: ");
+  Serial.println(port);
   while (1) {
     int packetSize = udp.parsePacket();
     if (packetSize > 0) {
@@ -245,9 +249,10 @@ void manager(void *params)
 
   WiFiServer server;
   WiFiClient TCPClient;
-
   server.begin(8883); // start TCP server
   server.setNoDelay(true);
+
+  Serial.println("start TCP server: 8883");
   while (1) {
     if (server.hasClient())
     {
@@ -301,22 +306,16 @@ void manager(void *params)
               }
               break;
             }
-          case 't': {
-              switch (buf1[1]) {
-                case '0':
-                  eepData.tcp = 0;
-                  save_eeprom();
-                  break;
-                case '1':
-                  eepData.tcp = 1;
-                  save_eeprom();
-                  break;
-                default:
-                  ack = false;
-                  break;
-              }
-              break;
-            }
+          case 't':
+            eepData.tcp = 1;
+            save_eeprom();
+            ESP.restart();
+            break;
+          case 'u':
+            eepData.tcp = 0;
+            save_eeprom();
+            ESP.restart();
+            break;
           case 'r':
             ESP.restart();
             break;
@@ -421,8 +420,6 @@ void load_eeprom() {
   if (strcmp(eepData.check, DATA_VERSION)) {
     eepData.tcp = DEFAULT_TCP;
   }
-  Serial.print("eepData.tcp:");
-  Serial.println(eepData.tcp);
 }
 
 void save_eeprom() {
