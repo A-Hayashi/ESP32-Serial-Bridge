@@ -6,9 +6,10 @@
 #include <ArduinoOTA.h>
 #include <NetBIOS.h>
 #include <WiFiUdp.h>
+#include <EEPROM.h>
 
-//#define DEBUG (1)
-#define DEBUG (0)
+#define DEBUG (1)
+//#define DEBUG (0)
 
 //NetBIOS library only works in STA mode, and not in AP mode. #5300
 //https://github.com/espressif/arduino-esp32/issues/5300
@@ -30,7 +31,17 @@ const char *pw = "4u2V58F#"; // and this is the password
 #endif
 
 const char *netBios = "Bridge1"; // NetBIOS Name
-#define bufferSize 1024
+#define bufferSize (1024)
+
+struct DATA_SET {
+  bool tcp;
+  char check[10];
+};
+DATA_SET eepData;
+void manager(void *params);
+void load_eeprom();
+void save_eeprom();
+void init_eeprom();
 
 class Bridge
 {
@@ -38,7 +49,8 @@ class Bridge
     Bridge(int uartNo, int baudRate, int serialParam, int rxdPin, int txdPin, int port);
     static void runner(void *params);
     void start();
-    void loop();
+    void tcpLoop();
+    void udpLoop();
     void serialBegin(int baudRate, int serialParam);
   private:
     HardwareSerial serial;
@@ -95,58 +107,17 @@ void Bridge::serialBegin(int baudRate, int serialParam)
 void Bridge::runner(void *params)
 {
   Bridge* ref = static_cast<Bridge *>(params);
-  ref->loop();
+  if (eepData.tcp == 1) {
+    ref->tcpLoop();
+  } else {
+    ref->udpLoop();
+  }
 }
 
-void Bridge::loop()
+void Bridge::tcpLoop()
 {
   serial.end();
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
-
-#if 1
-  udp.begin(port); // start UDP server
-
-  while (1) {
-    int packetSize = udp.parsePacket();
-    if (packetSize > 0) {
-      remoteIp = udp.remoteIP(); // store the ip of the remote device
-      remotePort = udp.remotePort(); // store the port of the remote device
-      udp.read(buf1, bufferSize);
-
-      Serial.print("from\t");
-      Serial.print(port);
-      Serial.print(":");
-      Serial.write(buf1, packetSize);
-      Serial.println("");
-      serial.write(buf1, packetSize); // now send to UART(num):
-    }
-
-    if (serial.available()) {
-      while (serial.available())
-      {
-        buf2[i2] = serial.read(); // read char from UART(num)
-        if (i2 < bufferSize - 1) {
-          i2++;
-        }
-      }
-      // now send to WiFi:
-      if (i2 > 0) {
-        Serial.print("to\t");
-        Serial.print(remotePort);
-        Serial.print(":");
-        Serial.write(buf2, i2);
-        Serial.println("");
-
-        udp.beginPacket(remoteIp, remotePort); // remote IP and port
-        udp.write(buf2, i2);
-        udp.endPacket();
-      }
-      i2 = 0;
-    }
-    vTaskDelay(1);
-  }
-#endif
-#if 0
   server.begin(port); // start TCP server
   server.setNoDelay(true);
   while (1) {
@@ -208,8 +179,54 @@ void Bridge::loop()
     }
     vTaskDelay(1);
   }
-#endif
+}
 
+void Bridge::udpLoop()
+{
+  serial.end();
+  serial.begin(baudRate, serialParam, rxdPin, txdPin);
+
+  udp.begin(port); // start UDP server
+
+  while (1) {
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      remoteIp = udp.remoteIP(); // store the ip of the remote device
+      remotePort = udp.remotePort(); // store the port of the remote device
+      udp.read(buf1, bufferSize);
+
+      Serial.print("from\t");
+      Serial.print(port);
+      Serial.print(":");
+      Serial.write(buf1, packetSize);
+      Serial.println("");
+      serial.write(buf1, packetSize); // now send to UART(num):
+    }
+
+    if (serial.available()) {
+      while (serial.available())
+      {
+        buf2[i2] = serial.read(); // read char from UART(num)
+        if (i2 < bufferSize - 1) {
+          i2++;
+        }
+      }
+      // now send to WiFi:
+      if (i2 > 0) {
+        Serial.print("to\t");
+        Serial.print(remotePort);
+        Serial.print(":");
+        Serial.write(buf2, i2);
+        Serial.println("");
+
+        udp.beginPacket(remoteIp, remotePort); // remote IP and port
+        udp.write(buf2, i2);
+        udp.endPacket();
+      }
+      i2 = 0;
+    }
+    vTaskDelay(1);
+  }
 }
 
 #if (DEBUG==1)
@@ -284,6 +301,25 @@ void manager(void *params)
               }
               break;
             }
+          case 't': {
+              switch (buf1[1]) {
+                case '0':
+                  eepData.tcp = 0;
+                  save_eeprom();
+                  break;
+                case '1':
+                  eepData.tcp = 1;
+                  save_eeprom();
+                  break;
+                default:
+                  ack = false;
+                  break;
+              }
+              break;
+            }
+          case 'r':
+            ESP.restart();
+            break;
           default:
             ack = false;
             break;
@@ -313,6 +349,8 @@ void manager(void *params)
 void setup() {
   delay(500);
   Serial.begin(9600);
+  Serial.println("");
+  init_eeprom();
 
 #ifdef MODE_AP
   //AP mode (phone connects directly to ESP) (no router)
@@ -373,4 +411,27 @@ void setup() {
 
 void loop() {
   ArduinoOTA.handle();
+}
+
+#define DEFAULT_TCP     (1)
+#define DATA_VERSION    "DATA1.0"
+
+void load_eeprom() {
+  EEPROM.get<DATA_SET>(0, eepData);
+  if (strcmp(eepData.check, DATA_VERSION)) {
+    eepData.tcp = DEFAULT_TCP;
+  }
+  Serial.print("eepData.tcp:");
+  Serial.println(eepData.tcp);
+}
+
+void save_eeprom() {
+  strcpy(eepData.check, DATA_VERSION);
+  EEPROM.put<DATA_SET>(0, eepData);
+  EEPROM.commit();
+}
+
+void init_eeprom() {
+  EEPROM.begin(1024);
+  load_eeprom();
 }
