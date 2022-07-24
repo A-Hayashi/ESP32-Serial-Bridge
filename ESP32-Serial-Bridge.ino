@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 #include <ArduinoOTA.h>
 #include <NetBIOS.h>
+#include <WiFiUdp.h>
 
 //#define DEBUG (1)
 #define DEBUG (0)
@@ -49,6 +50,9 @@ class Bridge
 
     WiFiServer server;
     WiFiClient TCPClient;
+    WiFiUDP udp;
+    IPAddress remoteIp;
+    uint16_t remotePort;
 
     uint8_t buf1[bufferSize];
     uint16_t i1;
@@ -99,9 +103,52 @@ void Bridge::loop()
   serial.end();
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
 
+#if 1
+  udp.begin(port); // start UDP server
+
+  while (1) {
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      remoteIp = udp.remoteIP(); // store the ip of the remote device
+      remotePort = udp.remotePort(); // store the port of the remote device
+      udp.read(buf1, bufferSize);
+
+      Serial.print("from\t");
+      Serial.print(port);
+      Serial.print(":");
+      Serial.write(buf1, packetSize);
+      Serial.println("");
+      serial.write(buf1, packetSize); // now send to UART(num):
+    }
+
+    if (serial.available()) {
+      while (serial.available())
+      {
+        buf2[i2] = serial.read(); // read char from UART(num)
+        if (i2 < bufferSize - 1) {
+          i2++;
+        }
+      }
+      // now send to WiFi:
+      if (i2 > 0) {
+        Serial.print("to\t");
+        Serial.print(remotePort);
+        Serial.print(":");
+        Serial.write(buf2, i2);
+        Serial.println("");
+
+        udp.beginPacket(remoteIp, remotePort); // remote IP and port
+        udp.write(buf2, i2);
+        udp.endPacket();
+      }
+      i2 = 0;
+    }
+    vTaskDelay(1);
+  }
+#endif
+#if 0
   server.begin(port); // start TCP server
   server.setNoDelay(true);
-
   while (1) {
     if (server.hasClient())
     {
@@ -131,8 +178,8 @@ void Bridge::loop()
         Serial.print(port);
         Serial.print(":");
         Serial.write(buf1, i1);
-        serial.write(buf1, i1); // now send to UART(num):
         Serial.println("");
+        serial.write(buf1, i1); // now send to UART(num):
       }
       i1 = 0;
     }
@@ -161,6 +208,7 @@ void Bridge::loop()
     }
     vTaskDelay(1);
   }
+#endif
 
 }
 
