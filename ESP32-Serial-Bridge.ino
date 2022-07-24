@@ -6,6 +6,10 @@
 #include <ArduinoOTA.h>
 #include <NetBIOS.h>
 
+//#define DEBUG (1)
+#define DEBUG (0)
+
+//NetBIOS library only works in STA mode, and not in AP mode. #5300
 //https://github.com/espressif/arduino-esp32/issues/5300
 
 //#define MODE_AP // phone connects directly to ESP
@@ -34,7 +38,6 @@ class Bridge
     static void runner(void *params);
     void start();
     void loop();
-    xTaskHandle getTaskhandle();
     void serialBegin(int baudRate, int serialParam);
   private:
     HardwareSerial serial;
@@ -43,7 +46,6 @@ class Bridge
     int serialParam;
     int rxdPin;
     int txdPin;
-    xTaskHandle taskHandle;
 
     WiFiServer server;
     WiFiClient TCPClient;
@@ -73,7 +75,7 @@ void Bridge::start(void)
                            1024 * 3, /* スタックサイズ */
                            this,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
-                           &taskHandle,    /* ハンドル構造体のポインタ */
+                           NULL,    /* ハンドル構造体のポインタ */
                            0 );     /* 割り当てるコア (0/1) */
 
 }
@@ -84,12 +86,6 @@ void Bridge::serialBegin(int baudRate, int serialParam)
   this->serialParam = serialParam;
   serial.end();
   serial.begin(baudRate, serialParam, rxdPin, txdPin);
-}
-
-
-xTaskHandle Bridge::getTaskhandle(void)
-{
-  return taskHandle;
 }
 
 void Bridge::runner(void *params)
@@ -168,25 +164,22 @@ void Bridge::loop()
 
 }
 
-xTaskHandle managerTaskHandle;
-
+#if (DEBUG==1)
 Bridge a(3, 9600, SERIAL_8E1, 3, 1, 8880);
-//Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
+#else
+Bridge a(0, 9600, SERIAL_8E1, 3, 1, 8880);
+#endif
 Bridge b(1, 9600, SERIAL_8E1, 26, 27, 8881);
 Bridge c(2, 9600, SERIAL_8E1, 16, 17, 8882);
+
 void manager(void *params)
 {
-  //  Serial.end();
-
   a.start();
   b.start();
   c.start();
 
   WiFiServer server;
   WiFiClient TCPClient;
-  char buf1[bufferSize];
-  uint16_t i1;
-  bool ack;
 
   server.begin(8883); // start TCP server
   server.setNoDelay(true);
@@ -207,6 +200,8 @@ void manager(void *params)
 
     if (TCPClient)
     {
+      char buf1[bufferSize];
+      uint16_t i1;
       while (TCPClient.available())
       {
         buf1[i1] = TCPClient.read(); // read char from client (LK8000 app)
@@ -221,37 +216,29 @@ void manager(void *params)
         Serial.write(buf1, i1);
         Serial.println("");
 
-        ack = true;
-        char *ptr = strtok(buf1, ",");
-        if (strcmp(ptr, "SERIAL")) {
-          int baudRate;
-          int serialParam;
-          ptr = strtok(NULL, ",");
-          baudRate = atoi(ptr);
-          Serial.print("baudRate:");
-          Serial.println(baudRate);
-
-          ptr = strtok(NULL, ",");
-          Serial.print("serialParam:");
-          if (strcmp(ptr, "8N1") == 0) {
-            serialParam = SERIAL_8N1;
-            Serial.println("SERIAL_8N1");
-          }  else if (strcmp(ptr, "8E1") == 0) {
-            serialParam = SERIAL_8E1;
-            Serial.println("SERIAL_8E1");
-          } else if (strcmp(ptr, "8O1") == 0) {
-            serialParam = SERIAL_8O1;
-            Serial.println("SERIAL_8O1");
-          } else {
+        bool ack = true;
+        switch (buf1[0]) {
+          case 's': {
+              switch (buf1[1]) {
+                case '0':
+                  a.serialBegin(9600, SERIAL_8E1 );
+                  b.serialBegin(9600, SERIAL_8E1 );
+                  c.serialBegin(9600, SERIAL_8E1 );
+                  break;
+                case '1':
+                  a.serialBegin(460800, SERIAL_8N1 );
+                  b.serialBegin(460800, SERIAL_8N1 );
+                  c.serialBegin(460800, SERIAL_8N1 );
+                  break;
+                default:
+                  ack = false;
+                  break;
+              }
+              break;
+            }
+          default:
             ack = false;
-            serialParam = SERIAL_8N1;
-            Serial.println("SERIAL_8N1");
-          }
-          a.serialBegin(baudRate, serialParam);
-          b.serialBegin(baudRate, serialParam);
-          c.serialBegin(baudRate, serialParam);
-        } else {
-          ack = false;
+            break;
         }
 
         String res;
@@ -271,12 +258,7 @@ void manager(void *params)
       }
       i1 = 0;
     }
-
     vTaskDelay(1);
-    //    Serial.println("Start");
-    //    Serial.println(uxTaskGetStackHighWaterMark(b.getTaskhandle()));
-    //    Serial.println(uxTaskGetStackHighWaterMark(c.getTaskhandle()));
-    //    Serial.println(uxTaskGetStackHighWaterMark(managerTaskHandle));
   }
 }
 
@@ -328,12 +310,16 @@ void setup() {
   });
   ArduinoOTA.begin();
 
+#if (DEBUG==0)
+  Serial.end();
+#endif
+
   xTaskCreatePinnedToCore( manager,   /* タスクの入口となる関数名 */
                            "MANAGER", /* タスクの名称 */
                            1024 * 100, /* スタックサイズ */
                            NULL,    /* パラメータのポインタ */
                            1,       /* プライオリティ */
-                           &managerTaskHandle,    /* ハンドル構造体のポインタ */
+                           NULL,    /* ハンドル構造体のポインタ */
                            0 );     /* 割り当てるコア (0/1) */
 }
 
